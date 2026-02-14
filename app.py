@@ -189,17 +189,20 @@ def load_data():
 @st.cache_resource
 def train_model():
     df = load_data()
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(df)
     
-    # Use DBSCAN with optimal parameters
+    # Drop Cluster column if it exists (should not be used for training)
+    X = df.drop(columns=["Cluster"], errors="ignore")
+    
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
     dbscan = DBSCAN(eps=3.5, min_samples=4)
     dbscan.fit(X_scaled)
     
-    return dbscan, scaler
+    return dbscan, scaler, X
 
 # Load model and scaler
-dbscan, scaler = train_model()
+dbscan, scaler, X = train_model()
 df = load_data()
 
 # Main content
@@ -245,31 +248,37 @@ if st.button("🔮 Predict Cluster"):
     # Scale the input
     input_scaled = scaler.transform(input_data)
     
-    # Get training data
-    X_scaled = scaler.transform(df.values)
+    # Get training data (features only)
+    X_scaled = scaler.transform(X.values)
     
     # Calculate distances to all training points
     distances = pairwise_distances(input_scaled, X_scaled)
     
-    # Get core samples from DBSCAN
-    core_samples = dbscan.core_sample_indices_
-    
-    # Count points within eps
+    # DBSCAN parameters
     eps = 3.5
     min_samples = 4
-    neighbors_within_eps = np.sum(distances[0] <= eps)
     
-    if neighbors_within_eps >= min_samples:
-        # Use only core points for prediction
-        core_distances = distances[0][core_samples]
+    # Find minimum distance to any training point
+    min_distance = np.min(distances[0])
+    nearest_idx = np.argmin(distances[0])
+    
+    # If nearest is noise → noise
+    if dbscan.labels_[nearest_idx] == -1:
+        cluster = -1
+    else:
+        core_samples = dbscan.core_sample_indices_
+        neighbors = np.sum(distances[0] <= eps)
         
-        if np.any(core_distances <= eps):
-            nearest_core = core_samples[np.argmin(core_distances)]
-            cluster = dbscan.labels_[nearest_core]
+        if neighbors >= min_samples:
+            core_distances = distances[0][core_samples]
+            
+            if np.any(core_distances <= eps):
+                nearest_core = core_samples[np.argmin(core_distances)]
+                cluster = dbscan.labels_[nearest_core]
+            else:
+                cluster = -1
         else:
             cluster = -1
-    else:
-        cluster = -1  # Noise
     
     # Display result
     st.markdown('---')

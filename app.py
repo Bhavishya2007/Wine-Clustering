@@ -245,10 +245,31 @@ if st.button("🔮 Predict Cluster"):
     # Scale the input
     input_scaled = scaler.transform(input_data)
     
-    # Find nearest point in training data and assign its cluster
-    distances = pairwise_distances(input_scaled, scaler.transform(df.values))
-    nearest_idx = np.argmin(distances)
-    cluster = dbscan.labels_[nearest_idx]
+    # Get training data
+    X_scaled = scaler.transform(df.values)
+    
+    # Calculate distances to all training points
+    distances = pairwise_distances(input_scaled, X_scaled)
+    
+    # Get core samples from DBSCAN
+    core_samples = dbscan.core_sample_indices_
+    
+    # Count points within eps
+    eps = 3.5
+    min_samples = 4
+    neighbors_within_eps = np.sum(distances[0] <= eps)
+    
+    if neighbors_within_eps >= min_samples:
+        # Use only core points for prediction
+        core_distances = distances[0][core_samples]
+        
+        if np.any(core_distances <= eps):
+            nearest_core = core_samples[np.argmin(core_distances)]
+            cluster = dbscan.labels_[nearest_core]
+        else:
+            cluster = -1
+    else:
+        cluster = -1  # Noise
     
     # Display result
     st.markdown('---')
